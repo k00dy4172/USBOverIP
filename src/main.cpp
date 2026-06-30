@@ -15,5 +15,7 @@ int main()
     {
         return -1;
     }
+	manager.EnumerateDevices();
+
     return 0;
 }
