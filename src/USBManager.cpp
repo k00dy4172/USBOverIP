@@ -45,7 +45,6 @@ void USBManager::Shutdown()
 void USBManager::EnumerateDevices()
 {
     libusb_device** DeviceList = nullptr;
-
     ssize_t DeviceCount = libusb_get_device_list(
 		m_Context, //컨텍스트의 포인터를 첫 번째 매개변수로 받는다.
 		&DeviceList //DeviceList 변수의 주소를 전달한다.
@@ -62,6 +61,7 @@ void USBManager::EnumerateDevices()
     
     for (ssize_t i = 0;i < DeviceCount;i++) 
     {
+        std::cout << "====================" << std::endl;
 		libusb_device* Device = DeviceList[i]; //주소록(DeviceList)에서 i번째 장치의 주소를 가져온다.
         libusb_device_descriptor Descriptor;
 		int Result = //성공 시 0을 반환하고, 실패 시 음수 값을 반환한다. 
@@ -74,7 +74,7 @@ void USBManager::EnumerateDevices()
 			std::cout << "Failed to get device descriptor for device " << i << std::endl;
 			continue;
 		}
-		std::cout //Vendor ID와 Product ID를 16진수로 출력한다.
+        std::cout //Vendor ID와 Product ID를 16진수로 출력한다.
             << "VID : 0x"
             << std::hex
             << Descriptor.idVendor
@@ -87,8 +87,54 @@ void USBManager::EnumerateDevices()
             << Descriptor.idProduct
             << std::dec
             << std::endl;
+        libusb_device_handle* DeviceHandle = nullptr;
+
+        Result = //0을 반환하면 성공, 음수 값을 반환하면 실패이다.
+            libusb_open( //장치를 열고, DeviceHandle에 장치 핸들을 저장한다.
+                Device, //조회할 장치의 주소를 첫 번째 매개변수로 전달한다.
+                &DeviceHandle //DeviceHandle의 주소를 매개변수로 전달한다.
+                //libusb_open() 함수는 장치를 열고, DeviceHandle에 장치 핸들을 저장한다.
+            );
+        if (Result != LIBUSB_SUCCESS) //장치를 여는 데 실패하면, libusb_open() 함수는 음수 값을 반환한다.
+        {
+            std::cout << "Failed to open device "
+                << i
+                << " : "
+                << libusb_error_name(Result)
+                << std::endl;
+            continue;
+        }
+		PrintDeviceInfo(Device, Descriptor, DeviceHandle); //장치의 제조사 문자열을 출력한다.
+        
+        libusb_close(DeviceHandle);
+
 
     }
-
     libusb_free_device_list(DeviceList, 1);
+}
+void USBManager::PrintDeviceInfo(libusb_device* Device, const libusb_device_descriptor &Descriptor, libusb_device_handle* DeviceHandle) {
+    const std::string DataString[3] = { "Manufacturer", "Product", "SerialNumber"};
+    const uint8_t DataIndex[3] = {Descriptor.iManufacturer, Descriptor.iProduct, Descriptor.iSerialNumber};
+	
+    for (int i = 0; i < 3; i++)
+    {
+        unsigned char Data[256] = { NULL };
+        int Result = //성공하면 문자열의 길이를 반환하고, 실패하면 음수 값을 반환한다.
+            libusb_get_string_descriptor_ascii(//장치의 제조사 문자열을 가져온다.
+                DeviceHandle, //장치 핸들을 첫 번째 매개변수로 전달한다.
+                DataIndex[i], //장치 설명자에서 Data의 문자열의 인덱스를 두 번째 매개변수로 전달한다.
+                &Data[0], ///Data 배열의 첫 번째 요소의 주소를 세 번째 매개변수로 전달한다.
+                256 //Data 배열의 크기를 네 번째 매개변수로 전달한다.
+            );
+        if (Result > 0) std::cout <<DataString[i]<< ": " << Data << std::endl;
+        else
+        {
+            std::cout 
+                <<"Failed to get"
+                <<DataString[i]<<" string for device "
+                << " : "
+                << libusb_error_name(Result)
+                << std::endl;
+        }
+    }
 }
