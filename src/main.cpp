@@ -2,12 +2,18 @@
 //
 
 #include "main.h"
-#include "hello.h"
+#include "USBManager.h"
+
 
 using namespace std;
 
 int main()
 {
-	PrintHello();
-	return 0;
+    USBManager manager;
+
+    if (!manager.Initialize())
+    {
+        return -1;
+    }
+    return 0;
 }
