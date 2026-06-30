@@ -1,0 +1,22 @@
+# Visual Studio
+.vs/
+
+# CMake
+out/
+build/
+
+# Executables
+*.exe
+
+# Debug
+*.pdb
+*.ilk
+
+# Object files
+*.obj
+
+# Cache
+*.cache
+
+# Logs
+*.log
