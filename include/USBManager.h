@@ -15,8 +15,12 @@ public:
     void EnumerateDevices();
 
 private:
-	void PrintDeviceInfo(libusb_device* Device, const libusb_device_descriptor &Descriptor, libusb_device_handle* DeviceHandle);
-
+	void PrintDeviceInfo(const libusb_device_descriptor &Descriptor, libusb_device_handle* DeviceHandle);
+    void PrintConfiguration(libusb_device* Device);
+    void PrintInterfaceInfo(const libusb_config_descriptor* Config);
+    const char* GetInterfaceClassName(uint8_t InterfaceClass);
+    void PrintEndpointInfo(const libusb_interface_descriptor& Descriptor);
+    const char* GetTransferTypeName(uint8_t TransferType);
 private:
 
 	libusb_context* m_Context; //m_Context는 libusb의 컨텍스트의 포인터이다.

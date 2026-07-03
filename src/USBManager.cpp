@@ -61,7 +61,7 @@ void USBManager::EnumerateDevices()
     
     for (ssize_t i = 0;i < DeviceCount;i++) 
     {
-        std::cout << "====================" << std::endl;
+
 		libusb_device* Device = DeviceList[i]; //주소록(DeviceList)에서 i번째 장치의 주소를 가져온다.
         libusb_device_descriptor Descriptor;
 		int Result = //성공 시 0을 반환하고, 실패 시 음수 값을 반환한다. 
@@ -74,19 +74,7 @@ void USBManager::EnumerateDevices()
 			std::cout << "Failed to get device descriptor for device " << i << std::endl;
 			continue;
 		}
-        std::cout //Vendor ID와 Product ID를 16진수로 출력한다.
-            << "VID : 0x"
-            << std::hex
-            << Descriptor.idVendor
-            << std::dec
-            << std::endl;
 
-        std::cout
-            << "PID : 0x"
-            << std::hex
-            << Descriptor.idProduct
-            << std::dec
-            << std::endl;
         libusb_device_handle* DeviceHandle = nullptr;
 
         Result = //0을 반환하면 성공, 음수 값을 반환하면 실패이다.
@@ -95,6 +83,21 @@ void USBManager::EnumerateDevices()
                 &DeviceHandle //DeviceHandle의 주소를 매개변수로 전달한다.
                 //libusb_open() 함수는 장치를 열고, DeviceHandle에 장치 핸들을 저장한다.
             );
+        if (Result == LIBUSB_ERROR_NOT_SUPPORTED) continue;
+        std::cout << "========================================" << std::endl;
+        std::cout //Vendor ID와 Product ID를 16진수로 출력한다.
+            << "VID : 0x"
+            << std::hex
+            << Descriptor.idVendor
+            << std::dec
+            << std::endl;
+        std::cout
+            << "PID : 0x"
+            << std::hex
+            << Descriptor.idProduct
+            << std::dec
+            << std::endl;
+
         if (Result != LIBUSB_SUCCESS) //장치를 여는 데 실패하면, libusb_open() 함수는 음수 값을 반환한다.
         {
             std::cout << "Failed to open device "
@@ -104,21 +107,22 @@ void USBManager::EnumerateDevices()
                 << std::endl;
             continue;
         }
-		PrintDeviceInfo(Device, Descriptor, DeviceHandle); //장치의 제조사 문자열을 출력한다.
+		PrintDeviceInfo(Descriptor, DeviceHandle); //장치의 제조사 문자열을 출력한다.
+
+        PrintConfiguration(Device);
         
-        libusb_close(DeviceHandle);
 
-
+        libusb_close(DeviceHandle); //핸들을 닫는다. 
     }
-    libusb_free_device_list(DeviceList, 1);
+    libusb_free_device_list(DeviceList, 1); //DeviceList에 할당된 메모리를 해제한다. 또한 참조자 수를 1 감소 시킨다.
 }
-void USBManager::PrintDeviceInfo(libusb_device* Device, const libusb_device_descriptor &Descriptor, libusb_device_handle* DeviceHandle) {
+void USBManager::PrintDeviceInfo(const libusb_device_descriptor &Descriptor, libusb_device_handle* DeviceHandle) {
     const std::string DataString[3] = { "Manufacturer", "Product", "SerialNumber"};
     const uint8_t DataIndex[3] = {Descriptor.iManufacturer, Descriptor.iProduct, Descriptor.iSerialNumber};
 	
     for (int i = 0; i < 3; i++)
     {
-        unsigned char Data[256] = { NULL };
+        unsigned char Data[256]{};
         int Result = //성공하면 문자열의 길이를 반환하고, 실패하면 음수 값을 반환한다.
             libusb_get_string_descriptor_ascii(//장치의 제조사 문자열을 가져온다.
                 DeviceHandle, //장치 핸들을 첫 번째 매개변수로 전달한다.
@@ -136,5 +140,143 @@ void USBManager::PrintDeviceInfo(libusb_device* Device, const libusb_device_desc
                 << libusb_error_name(Result)
                 << std::endl;
         }
+    }
+}
+
+void USBManager::PrintConfiguration(libusb_device* Device)
+{
+    libusb_config_descriptor* Config = nullptr;
+
+    int Result = //성공하면 0을 반환하고 실패하면 음수를 반환한다.
+        libusb_get_config_descriptor(
+            Device,
+            0,
+            &Config
+        );
+
+    if (Result != LIBUSB_SUCCESS)
+    {
+        std::cout << "Failed to get configuration. : "
+            << libusb_error_name(Result)
+            << std::endl;
+        return;
+    }
+
+    std::cout
+        << "Found Configuration Interfaces : "
+        << static_cast<int> (Config->bNumInterfaces)
+        << std::endl;
+    PrintInterfaceInfo(Config);
+
+    libusb_free_config_descriptor(Config);
+
+}
+
+void USBManager::PrintInterfaceInfo(const libusb_config_descriptor* Config) 
+{
+    for(uint8_t i = 0;i < Config->bNumInterfaces;i++) 
+    {
+        const libusb_interface& Interface = Config->interface[i];
+        const libusb_interface_descriptor& Descriptor = Interface.altsetting[0];
+        if (Descriptor.bInterfaceClass != LIBUSB_CLASS_HID) continue;
+        std::cout << "--------- HID DEVICE FOUND ----------" << std::endl;
+        std::cout
+            << "Interface: "
+            << static_cast<int>(i)
+            << std::endl;
+        std::cout
+            << "Class : "
+            << GetInterfaceClassName(Descriptor.bInterfaceClass)
+            << "\n"
+            << std::endl;
+
+        PrintEndpointInfo(Descriptor);
+
+    }
+
+}
+
+void USBManager::PrintEndpointInfo(const libusb_interface_descriptor& Descriptor)
+{
+    for (uint8_t i = 0; i < Descriptor.bNumEndpoints; i++)
+    {
+        const libusb_endpoint_descriptor& Endpoint = Descriptor.endpoint[i];
+            
+        std::cout
+            << "Endpoint : "
+            << static_cast<int>(i)
+            << std::endl;
+        std::cout
+            << "Address : 0x"
+            << std::hex
+            << static_cast<int>(Endpoint.bEndpointAddress)
+            << std::dec
+            << std::endl;
+        if (Endpoint.bEndpointAddress & LIBUSB_ENDPOINT_IN)
+        {
+            std::cout
+                << "Direction : IN"
+                << std::endl;
+        }
+        else
+        {
+            std::cout
+                << "Direction : OUT"
+                << std::endl;
+        }
+        std::cout
+            << "Max Packet Size : "
+            << Endpoint.wMaxPacketSize
+            <<"\n"
+            << std::endl;
+
+        std::cout
+            << "Transfer Type : "
+            << GetTransferTypeName(Endpoint.bmAttributes)
+            << std::endl;
+    }
+}
+
+const char* USBManager::GetTransferTypeName(uint8_t Attributes)
+{
+    switch(Attributes & LIBUSB_TRANSFER_TYPE_MASK)
+    {
+    case LIBUSB_TRANSFER_TYPE_BULK:
+         return "Bulk";
+    case LIBUSB_TRANSFER_TYPE_ISOCHRONOUS:
+        return "Isochronous";
+    case LIBUSB_TRANSFER_TYPE_CONTROL:
+        return "Control";
+    case LIBUSB_TRANSFER_TYPE_INTERRUPT:
+        return "Interrupt";
+    default:
+        return "Unknown";
+
+    }
+}
+const char* USBManager::GetInterfaceClassName(uint8_t InterfaceClass)
+{
+    switch (InterfaceClass)
+    {
+    case LIBUSB_CLASS_HID:
+        return "HID";
+
+    case LIBUSB_CLASS_AUDIO:
+        return "Audio";
+
+    case LIBUSB_CLASS_HUB:
+        return "Hub";
+
+    case LIBUSB_CLASS_MASS_STORAGE:
+        return "Mass Storage";
+
+    case LIBUSB_CLASS_COMM:
+        return "Communication";
+
+    case LIBUSB_CLASS_VENDOR_SPEC:
+        return "Vendor Specific";
+
+    default:
+        return "Unknown";
     }
 }
