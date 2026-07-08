@@ -21,6 +21,10 @@ private:
     const char* GetInterfaceClassName(uint8_t InterfaceClass);
     void PrintEndpointInfo(const libusb_interface_descriptor& Descriptor);
     const char* GetTransferTypeName(uint8_t TransferType);
+    void ReadReportDescriptor(
+        libusb_device* Device,
+        libusb_device_handle* DeviceHandle
+    );
 private:
 
 	libusb_context* m_Context; //m_Context는 libusb의 컨텍스트의 포인터이다.

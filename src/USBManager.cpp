@@ -110,8 +110,12 @@ void USBManager::EnumerateDevices()
 		PrintDeviceInfo(Descriptor, DeviceHandle); //장치의 제조사 문자열을 출력한다.
 
         PrintConfiguration(Device);
-        
 
+        ReadReportDescriptor(
+            Device,
+            DeviceHandle
+        );
+        
         libusb_close(DeviceHandle); //핸들을 닫는다. 
     }
     libusb_free_device_list(DeviceList, 1); //DeviceList에 할당된 메모리를 해제한다. 또한 참조자 수를 1 감소 시킨다.
@@ -235,6 +239,116 @@ void USBManager::PrintEndpointInfo(const libusb_interface_descriptor& Descriptor
             << GetTransferTypeName(Endpoint.bmAttributes)
             << std::endl;
     }
+}
+
+void USBManager::ReadReportDescriptor(
+    libusb_device* Device,
+    libusb_device_handle* DeviceHandle)
+{
+    libusb_config_descriptor* Config = nullptr;
+
+    int Result =
+        libusb_get_config_descriptor(
+            Device,
+            0,
+            &Config
+        );
+
+    if (Result != LIBUSB_SUCCESS)
+    {
+        std::cout
+            << "Failed to get configuration."
+            << std::endl;
+        return;
+    }
+
+    for (uint8_t i = 0; i < Config->bNumInterfaces; i++)
+    {
+        const libusb_interface& Interface = Config->interface[i];
+
+        const libusb_interface_descriptor& Descriptor =
+            Interface.altsetting[0];
+
+        if (Descriptor.bInterfaceClass != LIBUSB_CLASS_HID)
+        {
+            continue;
+        }
+
+        std::cout
+            << "Preparing Report Descriptor for Interface "
+            << static_cast<int>(Descriptor.bInterfaceNumber)
+            << std::endl;
+
+        const unsigned char* Extra = Descriptor.extra;
+
+        if (Descriptor.extra_length < 9)
+        {
+            std::cout << "No HID Descriptor" << std::endl;
+            continue;
+        }
+
+        uint16_t ReportDescriptorLength =
+            (Extra[8] << 8) | Extra[7];
+
+        std::cout
+            << "Extra Descriptor Size : "
+            << static_cast<int>(Extra[0])
+            << std::endl;
+
+        std::cout
+            << "HID Version (BCD) : 0x"
+            << std::hex
+            << ((Extra[3] << 8) | Extra[2])
+            << std::dec
+            << std::endl;
+
+        std::cout
+            << "Report Descriptor Length : "
+            << ReportDescriptorLength
+            << std::endl;
+        unsigned char* ReportDescriptor =
+            new unsigned char[ReportDescriptorLength];
+
+        Result =
+            libusb_control_transfer(
+                DeviceHandle,
+                0x81,
+                LIBUSB_REQUEST_GET_DESCRIPTOR,
+                (0x22 << 8),
+                Descriptor.bInterfaceNumber,
+                ReportDescriptor,
+                ReportDescriptorLength,
+                1000
+            );
+        if (Result < 0)
+        {
+            std::cout
+                << "Failed to read Report Descriptor : "
+                << libusb_error_name(Result)
+                << std::endl;
+        }
+        else
+        {
+            std::cout
+                << "Report Descriptor Size : "
+                << Result
+                << std::endl;
+
+            for (int i = 0; i < Result; i++)
+            {
+                printf("%02X ", ReportDescriptor[i]);
+            }
+
+            printf("\n");
+        }
+        
+        delete[] ReportDescriptor; 
+    }
+   
+
+    libusb_free_config_descriptor(Config);
+    
+
 }
 
 const char* USBManager::GetTransferTypeName(uint8_t Attributes)
