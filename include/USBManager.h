@@ -25,6 +25,15 @@ private:
         libusb_device* Device,
         libusb_device_handle* DeviceHandle
     );
+
+    void ClaimInterface(
+        const libusb_interface_descriptor& Descriptor,
+        libusb_device_handle* DeviceHandle
+    );
+    void ReadInterruptData(
+        const libusb_interface_descriptor& Descriptor,
+        libusb_device_handle* DeviceHandle
+    );
 private:
 
 	libusb_context* m_Context; //m_Context는 libusb의 컨텍스트의 포인터이다.

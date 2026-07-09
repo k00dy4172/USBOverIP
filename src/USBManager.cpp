@@ -74,6 +74,7 @@ void USBManager::EnumerateDevices()
 			std::cout << "Failed to get device descriptor for device " << i << std::endl;
 			continue;
 		}
+        if (Descriptor.idVendor != 5426) continue; // 레이저 마우스만 감지
 
         libusb_device_handle* DeviceHandle = nullptr;
 
@@ -83,7 +84,13 @@ void USBManager::EnumerateDevices()
                 &DeviceHandle //DeviceHandle의 주소를 매개변수로 전달한다.
                 //libusb_open() 함수는 장치를 열고, DeviceHandle에 장치 핸들을 저장한다.
             );
+
         if (Result == LIBUSB_ERROR_NOT_SUPPORTED) continue;
+
+        libusb_set_auto_detach_kernel_driver(
+            DeviceHandle,
+            1
+        );
         std::cout << "========================================" << std::endl;
         std::cout //Vendor ID와 Product ID를 16진수로 출력한다.
             << "VID : 0x"
@@ -98,6 +105,7 @@ void USBManager::EnumerateDevices()
             << std::dec
             << std::endl;
 
+
         if (Result != LIBUSB_SUCCESS) //장치를 여는 데 실패하면, libusb_open() 함수는 음수 값을 반환한다.
         {
             std::cout << "Failed to open device "
@@ -109,7 +117,7 @@ void USBManager::EnumerateDevices()
         }
 		PrintDeviceInfo(Descriptor, DeviceHandle); //장치의 제조사 문자열을 출력한다.
 
-        PrintConfiguration(Device);
+        //PrintConfiguration(Device);
 
         ReadReportDescriptor(
             Device,
@@ -117,6 +125,7 @@ void USBManager::EnumerateDevices()
         );
         
         libusb_close(DeviceHandle); //핸들을 닫는다. 
+       
     }
     libusb_free_device_list(DeviceList, 1); //DeviceList에 할당된 메모리를 해제한다. 또한 참조자 수를 1 감소 시킨다.
 }
@@ -253,7 +262,6 @@ void USBManager::ReadReportDescriptor(
             0,
             &Config
         );
-
     if (Result != LIBUSB_SUCCESS)
     {
         std::cout
@@ -264,6 +272,7 @@ void USBManager::ReadReportDescriptor(
 
     for (uint8_t i = 0; i < Config->bNumInterfaces; i++)
     {
+        std::cout << "\n----------------------------------------------" << std::endl;
         const libusb_interface& Interface = Config->interface[i];
 
         const libusb_interface_descriptor& Descriptor =
@@ -320,6 +329,10 @@ void USBManager::ReadReportDescriptor(
                 ReportDescriptorLength,
                 1000
             );
+        std::cout
+            << "Control Transfer Returned : "
+            << Result
+            << std::endl;
         if (Result < 0)
         {
             std::cout
@@ -334,21 +347,113 @@ void USBManager::ReadReportDescriptor(
                 << Result
                 << std::endl;
 
-            for (int i = 0; i < Result; i++)
-            {
-                printf("%02X ", ReportDescriptor[i]);
-            }
-
-            printf("\n");
+  
         }
+        ClaimInterface(Descriptor, DeviceHandle);
+
         
         delete[] ReportDescriptor; 
     }
    
-
     libusb_free_config_descriptor(Config);
     
 
+}
+
+void USBManager::ClaimInterface(
+    const libusb_interface_descriptor& Descriptor,
+    libusb_device_handle* DeviceHandle
+)
+{
+    int Result = libusb_claim_interface(
+        DeviceHandle,
+        Descriptor.bInterfaceNumber
+    );
+
+    if (Result != LIBUSB_SUCCESS)
+    {
+        std::cout
+            << "Claim failed : "
+            << libusb_error_name(Result)
+            << std::endl;
+    }
+    else
+    {
+        std::cout
+            << "Interface claimed!"
+            << std::endl;
+    }
+    ReadInterruptData(Descriptor, DeviceHandle);
+
+    libusb_release_interface(
+        DeviceHandle,
+        Descriptor.bInterfaceNumber
+    );
+}
+
+void USBManager::ReadInterruptData(
+    const libusb_interface_descriptor& Descriptor,
+    libusb_device_handle* DeviceHandle
+) 
+{
+    for (uint8_t i = 0; i < Descriptor.bNumEndpoints; i++)
+    {
+        const libusb_endpoint_descriptor& Endpoint =
+            Descriptor.endpoint[i];
+
+        if ((Endpoint.bEndpointAddress & LIBUSB_ENDPOINT_DIR_MASK)
+            != LIBUSB_ENDPOINT_IN)
+        {
+            continue;
+        }
+
+        if ((Endpoint.bmAttributes & LIBUSB_TRANSFER_TYPE_MASK)
+            != LIBUSB_TRANSFER_TYPE_INTERRUPT)
+        {
+            continue;
+        }
+        unsigned char Buffer[64]{};
+
+        int ActualLength = 0;
+
+        int Result =
+            libusb_interrupt_transfer(
+                DeviceHandle,
+                Endpoint.bEndpointAddress,
+                Buffer,
+                sizeof(Buffer),
+                &ActualLength,
+                1000
+            );
+
+        if (Result == LIBUSB_SUCCESS)
+        {
+            std::cout
+                << "Received "
+                << ActualLength
+                << " bytes"
+                << std::endl;
+        }
+        else
+        {
+            std::cout
+                << "Read failed : "
+                << libusb_error_name(Result)
+                << std::endl;
+            std::cout
+                << "Endpoint Address : 0x"
+                << std::hex
+                << static_cast<int>(Endpoint.bEndpointAddress)
+                << std::dec
+                << std::endl;
+            std::cout
+                << "Interface Number : "
+                << static_cast<int>(Descriptor.bInterfaceNumber)
+                << std::endl;
+        }
+
+
+    }
 }
 
 const char* USBManager::GetTransferTypeName(uint8_t Attributes)
