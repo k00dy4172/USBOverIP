@@ -7,6 +7,7 @@ add_executable(
     src/main.cpp
     src/hello.cpp
     src/USBManager.cpp
+    src/RawInputManager.cpp
 )
 
 target_include_directories(

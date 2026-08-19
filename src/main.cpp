@@ -2,20 +2,34 @@
 //
 
 #include "main.h"
-#include "USBManager.h"
+//#include "USBManager.h"
+#include "RawInputManager.h"
 
 
 using namespace std;
 
 int main()
 {
-    USBManager manager;
+	//    USBManager manager;
+	//
+	//    if (!manager.Initialize())
+	//    {
+	//        return -1;
+	//    }
+	//	manager.EnumerateDevices();
+	//
+	//    return 0;
 
-    if (!manager.Initialize())
-    {
-        return -1;
-    }
-	manager.EnumerateDevices();
+	RawInputManager manager;
 
-    return 0;
+	if (!manager.Initialize())
+	{
+		return -1;
+	}
+
+	manager.Run();
+
+	return 0;
+
 }
+
