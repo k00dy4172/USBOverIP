@@ -46,7 +46,7 @@ bool RawInputManager::Initialize()
     RAWINPUTDEVICE RawInputDevice{};
 
     RawInputDevice.usUsagePage = 0x01; // Generic Desktop Controls
-    RawInputDevice.usUsage = 0x02;     // Mouse
+    RawInputDevice.usUsage = 0x05;     // GamePad
     RawInputDevice.dwFlags = RIDEV_INPUTSINK;
     RawInputDevice.hwndTarget = m_Window;
 
@@ -63,7 +63,7 @@ bool RawInputManager::Initialize()
     }
 
     std::cout
-        << "Raw mouse input registered."
+        << "Raw input registered."
         << std::endl;
 
     return true;
@@ -132,50 +132,49 @@ LRESULT CALLBACK RawInputManager::WindowProc(
         RAWINPUT* RawInput =
             reinterpret_cast<RAWINPUT*>(Buffer);
 
-        if (RawInput->header.dwType == RIM_TYPEMOUSE)
+        if (RawInput->header.dwType == RIM_TYPEHID)
         {
-            const RAWMOUSE& Mouse =
-                RawInput->data.mouse;
+            const RAWHID& HID =
+                RawInput->data.hid;
 
-            // 마우스 이동
-            if (Mouse.lLastX != 0 || Mouse.lLastY != 0)
+            std::cout
+                << "===================="
+                << std::endl;
+
+            std::cout
+                << "HID Report Received"
+                << std::endl;
+
+            std::cout
+                << "Report Size : "
+                << HID.dwSizeHid
+                << std::endl;
+
+            std::cout
+                << "Report Count : "
+                << HID.dwCount
+                << std::endl;
+
+            for (DWORD Report = 0;
+                Report < HID.dwCount;
+                Report++)
             {
+                const BYTE* Data =
+                    HID.bRawData + (Report * HID.dwSizeHid);
+
+                for (DWORD i = 0;
+                    i < HID.dwSizeHid;
+                    i++)
+                {
+                    std::cout
+                        << std::hex
+                        << std::uppercase
+                        << static_cast<int>(Data[i])
+                        << ' ';
+                }
+
                 std::cout
-                    << "Mouse Move"
-                    << " | X : "
-                    << Mouse.lLastX
-                    << " | Y : "
-                    << Mouse.lLastY
-                    << std::endl;
-            }
-
-            // 버튼 입력
-            if (Mouse.usButtonFlags & RI_MOUSE_LEFT_BUTTON_DOWN)
-            {
-                std::cout << "Left Button Down" << std::endl;
-            }
-
-            if (Mouse.usButtonFlags & RI_MOUSE_LEFT_BUTTON_UP)
-            {
-                std::cout << "Left Button Up" << std::endl;
-            }
-
-            if (Mouse.usButtonFlags & RI_MOUSE_RIGHT_BUTTON_DOWN)
-            {
-                std::cout << "Right Button Down" << std::endl;
-            }
-
-            if (Mouse.usButtonFlags & RI_MOUSE_RIGHT_BUTTON_UP)
-            {
-                std::cout << "Right Button Up" << std::endl;
-            }
-
-            // 휠
-            if (Mouse.usButtonFlags & RI_MOUSE_WHEEL)
-            {
-                std::cout
-                    << "Wheel : "
-                    << static_cast<SHORT>(Mouse.usButtonData)
+                    << std::dec
                     << std::endl;
             }
         }

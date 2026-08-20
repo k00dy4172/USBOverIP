@@ -1,35 +1,57 @@
-﻿// main.cpp : 애플리케이션의 진입점을 정의합니다.
-//
+﻿#include "main.h"
 
-#include "main.h"
-//#include "USBManager.h"
-#include "RawInputManager.h"
+#include <iostream>
 
-
-using namespace std;
+#include "RawInputTransport.h"
 
 int main()
 {
-	//    USBManager manager;
-	//
-	//    if (!manager.Initialize())
-	//    {
-	//        return -1;
-	//    }
-	//	manager.EnumerateDevices();
-	//
-	//    return 0;
+    RawInputTransport Transport;
 
-	RawInputManager manager;
+    if (!Transport.Initialize())
+    {
+        return -1;
+    }
 
-	if (!manager.Initialize())
-	{
-		return -1;
-	}
+    std::cout
+        << "Waiting for Raw Input..."
+        << std::endl;
 
-	manager.Run();
+    MSG Message{};
 
-	return 0;
+    while (true)
+    {
+        while (PeekMessage(
+            &Message,
+            nullptr,
+            0,
+            0,
+            PM_REMOVE))
+        {
+            if (Message.message == WM_QUIT)
+            {
+                Transport.Shutdown();
+                return 0;
+            }
 
+            TranslateMessage(&Message);
+            DispatchMessage(&Message);
+        }
+
+        USBPacket Packet;
+
+        while (Transport.Read(Packet))
+        {
+            std::cout
+                << "Packet received!"
+                << std::endl;
+
+            std::cout
+                << "Size : "
+                << Packet.Data.size()
+                << std::endl;
+        }
+
+        Sleep(1);
+    }
 }
-

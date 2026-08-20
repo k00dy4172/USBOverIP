@@ -8,6 +8,8 @@ add_executable(
     src/hello.cpp
     src/USBManager.cpp
     src/RawInputManager.cpp
+    src/RawInputTransport.cpp
+
 )
 
 target_include_directories(
