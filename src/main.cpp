@@ -1,26 +1,41 @@
-﻿#include "main.h"
+﻿// main.cpp : 애플리케이션의 진입점을 정의합니다.
+//
+
+
+#include "main.h"
 
 #include <iostream>
 
+#include "NetworkTransport.h"
 #include "RawInputTransport.h"
+
 
 int main()
 {
-    RawInputTransport Transport;
+    RawInputTransport InputTransport;
 
-    if (!Transport.Initialize())
+    if (!InputTransport.Initialize())
+    {
+        return -1;
+    }
+
+    NetworkTransport Network(
+        NetworkMode::Client
+    );
+
+    if (!Network.Initialize())
     {
         return -1;
     }
 
     std::cout
-        << "Waiting for Raw Input..."
+        << "Raw Input -> Network Transport running."
         << std::endl;
-
-    MSG Message{};
 
     while (true)
     {
+        MSG Message{};
+
         while (PeekMessage(
             &Message,
             nullptr,
@@ -28,30 +43,95 @@ int main()
             0,
             PM_REMOVE))
         {
-            if (Message.message == WM_QUIT)
-            {
-                Transport.Shutdown();
-                return 0;
-            }
-
             TranslateMessage(&Message);
             DispatchMessage(&Message);
         }
 
         USBPacket Packet;
 
-        while (Transport.Read(Packet))
+        if (InputTransport.Read(Packet))
         {
             std::cout
-                << "Packet received!"
+                << "Sending "
+                << Packet.Data.size()
+                << " bytes."
                 << std::endl;
 
-            std::cout
-                << "Size : "
-                << Packet.Data.size()
-                << std::endl;
+            if (!Network.Write(Packet))
+            {
+                std::cout
+                    << "Network send failed."
+                    << std::endl;
+
+                break;
+            }
         }
 
         Sleep(1);
     }
+
+    Network.Shutdown();
+    InputTransport.Shutdown();
+
+    return 0;
 }
+
+
+//#include "main.h"
+
+//#include <iostream>
+//
+//#include "NetworkTransport.h"
+//
+//int main()
+//{
+//    NetworkTransport Transport(
+//        NetworkMode::Server
+//    );
+//
+//    if (!Transport.Initialize())
+//    {
+//        return -1;
+//    }
+//
+//    std::cout
+//        << "Network Transport server running."
+//        << std::endl;
+//
+//    while (true)
+//    {
+//        USBPacket Packet;
+//
+//        if (!Transport.Read(Packet))
+//        {
+//            std::cout
+//                << "Connection closed."
+//                << std::endl;
+//
+//            break;
+//        }
+//
+//        std::cout
+//            << "Received "
+//            << Packet.Data.size()
+//            << " bytes : ";
+//
+//        for (uint8_t Byte : Packet.Data)
+//        {
+//            std::cout
+//                << std::hex
+//                << static_cast<int>(Byte)
+//                << ' ';
+//        }
+//
+//        std::cout
+//            << std::dec
+//            << std::endl;
+//    }
+//
+//    std::cin.get();
+//
+//    Transport.Shutdown();
+//
+//    return 0;
+//}
