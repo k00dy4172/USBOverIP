@@ -1,7 +1,13 @@
 #pragma once
 
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+
 #include <winsock2.h>
 #include <ws2tcpip.h>
+
+#include <cstdint>
 
 #include "USBTransport.h"
 
@@ -56,7 +62,9 @@ private:
 
     NetworkMode m_Mode;
 
-    SOCKET m_Socket;
+    SOCKET m_Socket =
+        INVALID_SOCKET;
 
-    SOCKET m_ClientSocket;
+    SOCKET m_ClientSocket =
+        INVALID_SOCKET;
 };

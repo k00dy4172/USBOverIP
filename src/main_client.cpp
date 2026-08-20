@@ -1,15 +1,19 @@
+// main_client.cpp : 애플리케이션의 진입점을 정의합니다.
+//
+
 #include "main.h"
 
 #include <iostream>
 
 #include "NetworkTransport.h"
-#include "RawInputTransport.h"
+#include "USBPcapTransport.h"
+
 
 int main()
 {
-    RawInputTransport InputTransport;
+    USBPcapTransport USBTransport;
 
-    if (!InputTransport.Initialize())
+    if (!USBTransport.Initialize())
     {
         return -1;
     }
@@ -20,31 +24,20 @@ int main()
 
     if (!Network.Initialize())
     {
+        USBTransport.Shutdown();
+
         return -1;
     }
 
     std::cout
-        << "USBOverIP Client running."
+        << "USBPcap -> Network client running."
         << std::endl;
 
     while (true)
     {
-        MSG Message{};
-
-        while (PeekMessage(
-            &Message,
-            nullptr,
-            0,
-            0,
-            PM_REMOVE))
-        {
-            TranslateMessage(&Message);
-            DispatchMessage(&Message);
-        }
-
         USBPacket Packet;
 
-        if (InputTransport.Read(Packet))
+        if (USBTransport.Read(Packet))
         {
             if (!Network.Write(Packet))
             {
@@ -60,7 +53,8 @@ int main()
     }
 
     Network.Shutdown();
-    InputTransport.Shutdown();
+
+    USBTransport.Shutdown();
 
     return 0;
 }

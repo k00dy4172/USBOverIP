@@ -1,14 +1,139 @@
 #include "NetworkTransport.h"
-#include "NetworkPacket.h"
 
 #include <iostream>
+#include <vector>
+#include <cstring>
+
+namespace
+{
+#pragma pack(push, 1)
+
+    struct NetworkPacketHeader
+    {
+        uint32_t Magic;
+
+        uint16_t Version;
+
+        uint16_t HeaderSize;
+
+        uint64_t IrpId;
+
+        uint16_t Bus;
+
+        uint16_t DeviceAddress;
+
+        uint8_t EndpointAddress;
+
+        uint8_t TransferType;
+
+        uint8_t Direction;
+
+        uint8_t Reserved;
+
+        uint32_t DataLength;
+    };
+
+#pragma pack(pop)
+
+    constexpr uint32_t NETWORK_MAGIC =
+        0x55534250;
+
+    constexpr uint16_t NETWORK_VERSION = 1;
+
+    constexpr uint16_t NETWORK_HEADER_SIZE =
+        sizeof(NetworkPacketHeader);
+
+    constexpr uint32_t NETWORK_MAX_DATA_SIZE =
+        16 * 1024 * 1024;
+
+    constexpr uint16_t NETWORK_PORT = 5000;
+
+    uint8_t ToTransferType(
+        USBTransferType Type
+    )
+    {
+        switch (Type)
+        {
+        case USBTransferType::Isochronous:
+            return 0;
+
+        case USBTransferType::Interrupt:
+            return 1;
+
+        case USBTransferType::Control:
+            return 2;
+
+        case USBTransferType::Bulk:
+            return 3;
+
+        default:
+            return 0xFF;
+        }
+    }
+
+    USBTransferType FromTransferType(
+        uint8_t Type
+    )
+    {
+        switch (Type)
+        {
+        case 0:
+            return USBTransferType::Isochronous;
+
+        case 1:
+            return USBTransferType::Interrupt;
+
+        case 2:
+            return USBTransferType::Control;
+
+        case 3:
+            return USBTransferType::Bulk;
+
+        default:
+            return USBTransferType::Unknown;
+        }
+    }
+
+    uint8_t ToDirection(
+        USBTransferDirection Direction
+    )
+    {
+        switch (Direction)
+        {
+        case USBTransferDirection::In:
+            return 0;
+
+        case USBTransferDirection::Out:
+            return 1;
+
+        default:
+            return 0xFF;
+        }
+    }
+
+    USBTransferDirection FromDirection(
+        uint8_t Direction
+    )
+    {
+        switch (Direction)
+        {
+        case 0:
+            return USBTransferDirection::In;
+
+        case 1:
+            return USBTransferDirection::Out;
+
+        default:
+            return USBTransferDirection::Unknown;
+        }
+    }
+}
 
 NetworkTransport::NetworkTransport(
     NetworkMode Mode
 )
-    : m_Mode(Mode),
-    m_Socket(INVALID_SOCKET),
-    m_ClientSocket(INVALID_SOCKET)
+    :
+    m_Mode(Mode)
 {
 }
 
@@ -30,31 +155,15 @@ bool NetworkTransport::Initialize()
     if (Result != 0)
     {
         std::cout
-            << "WSAStartup failed."
+            << "WSAStartup failed : "
+            << Result
             << std::endl;
 
         return false;
     }
 
-    m_Socket =
-        socket(
-            AF_INET,
-            SOCK_STREAM,
-            IPPROTO_TCP
-        );
-
-    if (m_Socket == INVALID_SOCKET)
-    {
-        std::cout
-            << "Socket creation failed."
-            << std::endl;
-
-        WSACleanup();
-
-        return false;
-    }
-
-    if (m_Mode == NetworkMode::Client)
+    if (m_Mode ==
+        NetworkMode::Client)
     {
         return InitializeClient();
     }
@@ -64,13 +173,32 @@ bool NetworkTransport::Initialize()
 
 bool NetworkTransport::InitializeClient()
 {
+    m_Socket =
+        socket(
+            AF_INET,
+            SOCK_STREAM,
+            IPPROTO_TCP
+        );
+
+    if (m_Socket ==
+        INVALID_SOCKET)
+    {
+        std::cout
+            << "Client socket creation failed."
+            << std::endl;
+
+        return false;
+    }
+
     sockaddr_in ServerAddress{};
 
     ServerAddress.sin_family =
         AF_INET;
 
     ServerAddress.sin_port =
-        htons(5000);
+        htons(
+            NETWORK_PORT
+        );
 
     if (inet_pton(
         AF_INET,
@@ -85,23 +213,29 @@ bool NetworkTransport::InitializeClient()
         return false;
     }
 
-    int Result =
-        connect(
-            m_Socket,
-            reinterpret_cast<sockaddr*>(
-                &ServerAddress
-                ),
-            sizeof(ServerAddress)
-        );
-
-    if (Result == SOCKET_ERROR)
+Result:
     {
-        std::cout
-            << "Connection failed : "
-            << WSAGetLastError()
-            << std::endl;
+        int ConnectResult =
+            connect(
+                m_Socket,
+                reinterpret_cast<sockaddr*>(
+                    &ServerAddress
+                    ),
+                sizeof(
+                    ServerAddress
+                    )
+            );
 
-        return false;
+        if (ConnectResult ==
+            SOCKET_ERROR)
+        {
+            std::cout
+                << "Connection failed : "
+                << WSAGetLastError()
+                << std::endl;
+
+            return false;
+        }
     }
 
     std::cout
@@ -113,27 +247,47 @@ bool NetworkTransport::InitializeClient()
 
 bool NetworkTransport::InitializeServer()
 {
+    m_Socket =
+        socket(
+            AF_INET,
+            SOCK_STREAM,
+            IPPROTO_TCP
+        );
+
+    if (m_Socket ==
+        INVALID_SOCKET)
+    {
+        std::cout
+            << "Server socket creation failed."
+            << std::endl;
+
+        return false;
+    }
+
     sockaddr_in ServerAddress{};
 
     ServerAddress.sin_family =
         AF_INET;
 
     ServerAddress.sin_addr.s_addr =
-        htonl(INADDR_ANY);
-
-    ServerAddress.sin_port =
-        htons(5000);
-
-    int Result =
-        bind(
-            m_Socket,
-            reinterpret_cast<sockaddr*>(
-                &ServerAddress
-                ),
-            sizeof(ServerAddress)
+        htonl(
+            INADDR_ANY
         );
 
-    if (Result == SOCKET_ERROR)
+    ServerAddress.sin_port =
+        htons(
+            NETWORK_PORT
+        );
+
+    if (bind(
+        m_Socket,
+        reinterpret_cast<sockaddr*>(
+            &ServerAddress
+            ),
+        sizeof(
+            ServerAddress
+            )
+    ) == SOCKET_ERROR)
     {
         std::cout
             << "Bind failed : "
@@ -143,13 +297,10 @@ bool NetworkTransport::InitializeServer()
         return false;
     }
 
-    Result =
-        listen(
-            m_Socket,
-            1
-        );
-
-    if (Result == SOCKET_ERROR)
+    if (listen(
+        m_Socket,
+        1
+    ) == SOCKET_ERROR)
     {
         std::cout
             << "Listen failed : "
@@ -170,7 +321,8 @@ bool NetworkTransport::InitializeServer()
             nullptr
         );
 
-    if (m_ClientSocket == INVALID_SOCKET)
+    if (m_ClientSocket ==
+        INVALID_SOCKET)
     {
         std::cout
             << "Accept failed : "
@@ -205,7 +357,8 @@ bool NetworkTransport::SendAll(
                 0
             );
 
-        if (Result == SOCKET_ERROR)
+        if (Result ==
+            SOCKET_ERROR)
         {
             return false;
         }
@@ -255,17 +408,19 @@ bool NetworkTransport::Write(
 )
 {
     SOCKET Socket =
-        m_Mode == NetworkMode::Client
+        m_Mode ==
+        NetworkMode::Client
         ? m_Socket
         : m_ClientSocket;
 
-    if (Socket == INVALID_SOCKET)
+    if (Socket ==
+        INVALID_SOCKET)
     {
         return false;
     }
 
     if (Packet.Data.size() >
-        NETWORK_MAX_PACKET_SIZE)
+        NETWORK_MAX_DATA_SIZE)
     {
         std::cout
             << "Packet too large."
@@ -277,18 +432,55 @@ bool NetworkTransport::Write(
     NetworkPacketHeader Header{};
 
     Header.Magic =
-        NETWORK_PACKET_MAGIC;
+        htonl(
+            NETWORK_MAGIC
+        );
 
-    Header.DataSize =
-        static_cast<uint32_t>(
-            Packet.Data.size()
-            );
+    Header.Version =
+        htons(
+            NETWORK_VERSION
+        );
 
-    Header.InterfaceNumber =
-        Packet.InterfaceNumber;
+    Header.HeaderSize =
+        htons(
+            NETWORK_HEADER_SIZE
+        );
+
+    Header.IrpId =
+        Packet.IrpId;
+
+    Header.Bus =
+        htons(
+            Packet.Bus
+        );
+
+    Header.DeviceAddress =
+        htons(
+            Packet.DeviceAddress
+        );
 
     Header.EndpointAddress =
         Packet.EndpointAddress;
+
+    Header.TransferType =
+        ToTransferType(
+            Packet.TransferType
+        );
+
+    Header.Direction =
+        ToDirection(
+            Packet.Direction
+        );
+
+    Header.Reserved =
+        0;
+
+    Header.DataLength =
+        htonl(
+            static_cast<uint32_t>(
+                Packet.Data.size()
+                )
+        );
 
     if (!SendAll(
         Socket,
@@ -299,7 +491,7 @@ bool NetworkTransport::Write(
     ))
     {
         std::cout
-            << "Failed to send packet header."
+            << "Failed to send network header."
             << std::endl;
 
         return false;
@@ -318,7 +510,7 @@ bool NetworkTransport::Write(
         ))
         {
             std::cout
-                << "Failed to send packet data."
+                << "Failed to send network payload."
                 << std::endl;
 
             return false;
@@ -333,11 +525,13 @@ bool NetworkTransport::Read(
 )
 {
     SOCKET Socket =
-        m_Mode == NetworkMode::Client
+        m_Mode ==
+        NetworkMode::Client
         ? m_Socket
         : m_ClientSocket;
 
-    if (Socket == INVALID_SOCKET)
+    if (Socket ==
+        INVALID_SOCKET)
     {
         return false;
     }
@@ -355,18 +549,46 @@ bool NetworkTransport::Read(
         return false;
     }
 
-    if (Header.Magic !=
-        NETWORK_PACKET_MAGIC)
+    if (ntohl(
+        Header.Magic
+    ) != NETWORK_MAGIC)
     {
         std::cout
-            << "Invalid network packet."
+            << "Invalid network packet magic."
             << std::endl;
 
         return false;
     }
 
-    if (Header.DataSize >
-        NETWORK_MAX_PACKET_SIZE)
+    if (ntohs(
+        Header.Version
+    ) != NETWORK_VERSION)
+    {
+        std::cout
+            << "Unsupported network packet version."
+            << std::endl;
+
+        return false;
+    }
+
+    if (ntohs(
+        Header.HeaderSize
+    ) != NETWORK_HEADER_SIZE)
+    {
+        std::cout
+            << "Invalid network header size."
+            << std::endl;
+
+        return false;
+    }
+
+    uint32_t DataLength =
+        ntohl(
+            Header.DataLength
+        );
+
+    if (DataLength >
+        NETWORK_MAX_DATA_SIZE)
     {
         std::cout
             << "Received packet is too large."
@@ -375,17 +597,40 @@ bool NetworkTransport::Read(
         return false;
     }
 
-    Packet.InterfaceNumber =
-        Header.InterfaceNumber;
+    Packet.IrpId =
+        Header.IrpId;
+
+    Packet.Bus =
+        ntohs(
+            Header.Bus
+        );
+
+    Packet.DeviceAddress =
+        ntohs(
+            Header.DeviceAddress
+        );
 
     Packet.EndpointAddress =
         Header.EndpointAddress;
 
+    Packet.TransferType =
+        FromTransferType(
+            Header.TransferType
+        );
+
+    Packet.Direction =
+        FromDirection(
+            Header.Direction
+        );
+
+    Packet.DataLength =
+        DataLength;
+
     Packet.Data.resize(
-        Header.DataSize
+        DataLength
     );
 
-    if (Header.DataSize > 0)
+    if (DataLength > 0)
     {
         if (!ReceiveAll(
             Socket,
@@ -393,7 +638,7 @@ bool NetworkTransport::Read(
                 Packet.Data.data()
                 ),
             static_cast<int>(
-                Header.DataSize
+                DataLength
                 )
         ))
         {
@@ -409,7 +654,8 @@ bool NetworkTransport::Read(
 
 void NetworkTransport::Shutdown()
 {
-    if (m_ClientSocket != INVALID_SOCKET)
+    if (m_ClientSocket !=
+        INVALID_SOCKET)
     {
         closesocket(
             m_ClientSocket
@@ -419,7 +665,8 @@ void NetworkTransport::Shutdown()
             INVALID_SOCKET;
     }
 
-    if (m_Socket != INVALID_SOCKET)
+    if (m_Socket !=
+        INVALID_SOCKET)
     {
         closesocket(
             m_Socket
